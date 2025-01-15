@@ -75,12 +75,37 @@ public class Game {
 	}
 	
 	static public Game returnGame(String id) {
+		System.out.println(games.size());
 		for (Game i : games) {
 			if(i.getId().equals(id)) {
 				return i;
 			}
 		}
 		return null;
+	}
+	
+	public synchronized void submitMove(HttpExchange exchange) throws IOException {
+		String playerName = getValueByKey(exchange, "name");
+	    String move = getValueByKey(exchange, "action").toLowerCase();
+		if (action1 == null) {
+	    	action1 = move;
+	        player1 = exchange;
+	        // Optionally, send an acknowledgment to player 1 indicating their move has been received
+	    } else if (action2 == null) {
+	    	action2 = move;
+	        player2 = exchange;
+	        // Both moves are now available; determine the winner and respond
+	        resolve();
+	    } else {
+	        // Handle the case where both moves have already been submitted
+	        sendResponse(exchange, "Both players have already submitted their moves.", 400);
+	    }
+	}
+
+	private void sendResponse(HttpExchange exchange, String response, int status) throws IOException {
+		exchange.sendResponseHeaders(status, response.length());
+		exchange.getResponseBody().write(response.getBytes());
+		exchange.getResponseBody().close();
 	}
 	
 	public void play(HttpExchange exchange) throws IOException {

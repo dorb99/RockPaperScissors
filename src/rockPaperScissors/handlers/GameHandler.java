@@ -52,12 +52,20 @@ public class GameHandler  implements HttpHandler{
 
 	private void playAction(HttpExchange exchange, String id) throws IOException {
 		// go to the game, find my game, and play the action. return result when finihsed
-		Game myGame = Game.returnGame(id);
-		if (myGame == null) {
-	        sendResponse(exchange, "Game not found", 404);
-	        return;
+		synchronized (Game.class) {
+	        Game myGame = Game.returnGame(id);
+	        if (myGame == null) {
+	            sendResponse(exchange, "Game not found", 404);
+	            return;
+	        }
+	        myGame.submitMove(exchange);
 	    }
-		myGame.play(exchange);		
+//		Game myGame = Game.returnGame(id);
+//		if (myGame == null) {
+//	        sendResponse(exchange, "Game not found", 404);
+//	        return;
+//	    }
+//		myGame.submitMove(exchange);		
 	}
 
 	private void joinGame(HttpExchange exchange) throws IOException {
