@@ -1,183 +1,158 @@
 package rockPaperScissors;
 
 import com.sun.net.httpserver.HttpExchange;
+import org.json.JSONObject;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.UUID;
 
-import org.json.JSONObject;
-
 public class Game {
-	
-	static ArrayList<Game> games = new ArrayList<Game>();
-	
-	// NOT GOOD PRACTICE, USE GETTERS AND SETTERS!!!
-	public HttpExchange player1;
-	public HttpExchange player2;
-	
-	private String name1;
-	private String name2;
-	
-	// NOT GOOD PRACTICE, USE GETTERS AND SETTERS!!!
-	public String action1 = "";
-	public String action2= "";
-	
-	private String id;
-	
-	
-	public Game(HttpExchange player1, HttpExchange player2) throws IOException {
-		this.player1 = player1;
-		this.player2 = player2;
-		this.name1 = getValueByKey(player1, "name");
-		this.name2 = getValueByKey(player2, "name");
-		createGameId();
-		games.add(this);
-	}
 
+    static ArrayList<Game> games = new ArrayList<>();
 
-	private String getValueByKey(HttpExchange player, String key)  {
-		try {
-	        // Cache the request body to avoid multiple reads
-	        String body = (String) player.getAttribute("cachedBody");
-	        if (body == null) {
-	            byte[] data = player.getRequestBody().readAllBytes();
-	            body = new String(data);
-	            player.setAttribute("cachedBody", body); // Cache the body
-	        }
-	        
-	        // Parse JSON and return the value
-	        JSONObject json = new JSONObject(body);
-	        String value = json.optString(key, "");
-	        if (value.isBlank()) {
-	            return key;
-	        } else {
-	            return value;
-	        }
-	    } catch (IOException e) {
-	        System.out.println("Error while looking for key: " + key);
-	        return key;
-	    }
-	}
+    private String name1 = null;
+    private String name2 = null;
+    private String action1 = null;
+    private String action2 = null;
+    private String id;
+    
+    private HttpExchange player1Ex = null;
 
+    // Constructor for game
+    public Game() {
+        createGameId();
+        games.add(this);
+    }
 
-	private void createGameId() throws IOException {
-		UUID id = UUID.randomUUID();
-		this.id = id.toString();
-	}
-	
-	public String getId() {
-		return this.id;
-	}
-	
-	static public boolean isValidId(String id) {
+    private void createGameId() {
+        UUID uuid = UUID.randomUUID();
+        this.id = uuid.toString();
+    }
+
+    public String getId() {
+        return this.id;
+    }
+
+    // looking for the Game object we are playing on (passing the id)
+    static public synchronized Game returnGame(String id) {
+        for (Game game : games) {
+            if (game.getId().equals(id)) {
+            	return game;
+            }
+        }
+        return null;
+    }
+
+    // method for submiting the action. synchronized for making sure that we wont receive problems when submitting action together
+    public synchronized void play(HttpExchange exchange) throws IOException {
+    	// getting the body as a json object
+        String requestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        JSONObject json = new JSONObject(requestBody);
+
+        // getting the name and action
+        String playerName = json.optString("name", "");
+        String action = json.optString("action", "").toLowerCase();
+
+        if (playerName.isEmpty() || action.isEmpty()) {
+            sendResponse(exchange, "Invalid request: name or action is missing.", 400);
+            return;
+        }
+
+        // logging 
+        System.out.println("Player: " + playerName + ", Action: " + action);
+
+        // if this is the first action submitted it is resolved as the first user
+        // NOTICE: we arent returning anything for our client, but we are finishing the method so we can rerun it with the second user
+        if (name1 == null) {
+            // Assign the first player
+            name1 = playerName;
+            action1 = action;
+            System.out.println("Assigned as Player 1: " + playerName);
+            // saving the first user exchange so we can return later the result
+            this.player1Ex = exchange;
+        } else if (name2 == null && !playerName.equals(name1)) {
+            // Assign the second player
+            name2 = playerName;
+            action2 = action;
+            System.out.println("Assigned as Player 2: " + playerName);
+            // resolving the game because the second action was submitted 
+            resolve(exchange);
+        } else if (playerName.equals(name1) && action1 == null) {
+            // Update action for Player 1 if missing
+            action1 = action;
+            System.out.println("Updated Action for Player 1: " + playerName);
+            sendResponse(exchange, "Action updated for Player 1.", 200);
+        } else if (playerName.equals(name2) && action2 == null) {
+            // Update action for Player 2 if missing
+            action2 = action;
+            System.out.println("Updated Action for Player 2: " + playerName);
+            resolve(exchange);
+        } else {
+            sendResponse(exchange, "Invalid or duplicate request.", 400);
+        }
+    }
+
+    private void resolve(HttpExchange exchange) throws IOException {
+        System.out.println("Resolving game...");
+
+        // NOT STATIC STRINGS, NOT A GOOD PRACTICE
+        String winner = "TIE";
+        switch (action1) {
+            case "rock":
+                if (action2.equals("paper")) {
+                    winner = name2;
+                } else if (action2.equals("scissors")) {
+                    winner = name1;
+                }
+                break;
+            case "paper":
+                if (action2.equals("rock")) {
+                    winner = name1;
+                } else if (action2.equals("scissors")) {
+                    winner = name2;
+                }
+                break;
+            case "scissors":
+                if (action2.equals("rock")) {
+                    winner = name2;
+                } else if (action2.equals("paper")) {
+                    winner = name1;
+                }
+                break;
+        }
+
+        String result = "Winner: " + winner;
+        System.out.println(result);
+
+        // returning result for both users, the second one who is the one running the current object and the first user who saved his exchange in the object
+        sendResponse(this.player1Ex, result, 200);
+        sendResponse(exchange, result, 200);
+        cleanup();
+    }
+
+    private void sendResponse(HttpExchange exchange, String response, int status) throws IOException {
+        exchange.sendResponseHeaders(status, response.getBytes().length);
+        exchange.getResponseBody().write(response.getBytes());
+        exchange.getResponseBody().close();
+    }
+
+    // cleaning the object (for future usage of regame, currently not used because we are just throwing and creating new game each time
+    private void cleanup() {
+        games.remove(this);
+        name1 = null;
+        name2 = null;
+        action1 = null;
+        action2 = null;
+    }
+
+	public static boolean isValidId(String id2) {
 		for (Game game : games) {
-			if(game.id == id) {
+			if(game.getId().equals(id2)) {
 				return true;
 			}
 		}
 		return false;
-	}
-	
-	static public synchronized Game returnGame(String id) {
-	    for (Game game : games) {
-	        if (game.getId().equals(id)) {
-	        	System.out.println("Found game");
-	            return game;
-	        }
-	    }
-	    return null;
-	}
-
-	
-	public synchronized void submitMove(HttpExchange exchange) throws IOException {
-		String playerName = getValueByKey(exchange, "name");
-	    String move = getValueByKey(exchange, "action").toLowerCase();
-		if (action1 == null) {
-	    	action1 = move;
-	        player1 = exchange;
-	        // Optionally, send an acknowledgment to player 1 indicating their move has been received
-	    } else if (action2 == null) {
-	    	action2 = move;
-	        player2 = exchange;
-	        // Both moves are now available; determine the winner and respond
-	        resolve();
-	    } else {
-	        // Handle the case where both moves have already been submitted
-	        sendResponse(exchange, "Both players have already submitted their moves.", 400);
-	    }
-	}
-
-	private void sendResponse(HttpExchange exchange, String response, int status) throws IOException {
-		exchange.sendResponseHeaders(status, response.length());
-		exchange.getResponseBody().write(response.getBytes());
-		exchange.getResponseBody().close();
-	}
-	
-	public void play(HttpExchange exchange) throws IOException {
-		System.out.println("Starting");
-	    String playerName = getValueByKey(exchange, "name");
-	    String action = getValueByKey(exchange, "action").toLowerCase();
-
-	    System.out.println("player "+playerName+" action "+action);
-	    System.out.println("saved data: 1-"+name1+" 2-"+name2);
-	    if (this.name1.equals(playerName) && this.action1.isBlank()) {
-	        this.action1 = action;
-	        this.player1 = exchange;
-	        System.out.println("Set action1 for player: " + playerName);
-	    } else if (this.name2.equals(playerName) && this.action2.isBlank()) {
-	        this.action2 = action;
-	        this.player2 = exchange;
-	        System.out.println("Set action2 for player: " + playerName);
-	        resolve();
-	    } else {
-	        System.out.println("Invalid player or action already set for player: " + playerName);
-	        sendResponse(exchange, "Invalid action submission.", 400);
-	    }
-	}
-
-
-
-	private void resolve() throws IOException {
-		// USING STATIC STRINGS AND NOT WRITING
-		System.out.println("DEBUG DATA "+this.name1+" action: "+this.action1);
-		System.out.println("DEBUG DATA "+this.name2+" action: "+this.action2);
-		String winner = "TIE";
-		switch(this.action1) {
-			case "rock":
-				if(action2.equals("paper")) {
-					winner = name2;
-				} else if (action2.equals("scissor")) {
-					winner = name1;
-				}
-				break;
-			case "paper":
-				if(this.action2.equals("rock")) {
-					winner = name1;
-				} else if (this.action2.equals("scissor")) {
-					winner = name2;
-				}
-				break;
-			case "scissor":
-				if(this.action2.equals("rock")) {
-					winner = name2;
-				} else if (this.action2.equals("paper")) {
-					winner = name1;
-				}
-				break;
-		}
-		player1.sendResponseHeaders(400, winner.length());
-		player1.getResponseBody().write(winner.getBytes());
-		player2.sendResponseHeaders(400, winner.length());
-		player2.getResponseBody().write(winner.getBytes());
-		
-		// Create as a method!
-		games.remove(this);
-		player1.getResponseBody().close();
-		player2.getResponseBody().close();
-		this.action1 = "";
-		this.action2 = "";
-		player1 = null;
-		player2 = null;
 	}
 }
