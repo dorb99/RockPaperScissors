@@ -110,29 +110,26 @@ public class Game {
 	}
 	
 	public void play(HttpExchange exchange) throws IOException {
-		// DIDNT VALIDATED ACTION!!!
-		String action = this.getValueByKey(exchange, "action");
-	    System.out.println("Received action: " + action + " from first player: "+this.action1.isBlank());
-	    
-		if(this.action1.isBlank()) {
-			System.out.println("Setted action 1!");
-			this.name1 = getValueByKey(exchange, "name");
-			this.action1 = action.toLowerCase();
-			this.player1 = exchange;
-		} else if (this.action2.isBlank()) {
-	        System.out.println("Setting action2!");
-	        this.name2 = getValueByKey(exchange, "name");
-	        this.action2 = action.toLowerCase();
-	        this.player2 = exchange;
+	    String playerName = getValueByKey(exchange, "name");
+	    String action = getValueByKey(exchange, "action").toLowerCase();
 
-	        // Resolve the game only after both actions are set
-	        System.out.println("Both actions set, resolving game...");
-	        this.resolve();
+	    System.out.println("player "+playerName+" action "+action);
+	    System.out.println("saved data: 1-"+name1+" 2-"+name2);
+	    if (this.name1.equals(playerName) && this.action1.isBlank()) {
+	        this.action1 = action;
+	        this.player1 = exchange;
+	        System.out.println("Set action1 for player: " + playerName);
+	    } else if (this.name2.equals(playerName) && this.action2.isBlank()) {
+	        this.action2 = action;
+	        this.player2 = exchange;
+	        System.out.println("Set action2 for player: " + playerName);
+	        resolve();
 	    } else {
-	        System.out.println("Both actions are already set, ignoring...");
-	        sendResponse(exchange, "Game already in progress or completed.", 400);
+	        System.out.println("Invalid player or action already set for player: " + playerName);
+	        sendResponse(exchange, "Invalid action submission.", 400);
 	    }
 	}
+
 
 
 	private void resolve() throws IOException {
