@@ -57,7 +57,7 @@ public class Game {
 
 
 	private void createGameId() throws IOException {
-		UUID id = new UUID((long) this.name1.length(), (long) this.name2.length());
+		UUID id = UUID.randomUUID();
 		this.id = id.toString();
 	}
 	
@@ -74,15 +74,16 @@ public class Game {
 		return false;
 	}
 	
-	static public Game returnGame(String id) {
-		System.out.println(games.size());
-		for (Game i : games) {
-			if(i.getId().equals(id)) {
-				return i;
-			}
-		}
-		return null;
+	static public synchronized Game returnGame(String id) {
+	    for (Game game : games) {
+	        if (game.getId().equals(id)) {
+	        	System.out.println("Found game");
+	            return game;
+	        }
+	    }
+	    return null;
 	}
+
 	
 	public synchronized void submitMove(HttpExchange exchange) throws IOException {
 		String playerName = getValueByKey(exchange, "name");
@@ -111,11 +112,8 @@ public class Game {
 	public void play(HttpExchange exchange) throws IOException {
 		// DIDNT VALIDATED ACTION!!!
 		String action = this.getValueByKey(exchange, "action");
-		
-		System.out.println("Seting action!");
-		System.out.println(this.action1.isBlank());
-		System.out.println(action);
-		
+	    System.out.println("Received action: " + action + " from first player: "+this.action1.isBlank());
+	    
 		if(this.action1.isBlank()) {
 			System.out.println("Setted action 1!");
 			this.name1 = getValueByKey(exchange, "name");
@@ -132,6 +130,7 @@ public class Game {
 	        this.resolve();
 	    } else {
 	        System.out.println("Both actions are already set, ignoring...");
+	        sendResponse(exchange, "Game already in progress or completed.", 400);
 	    }
 	}
 
