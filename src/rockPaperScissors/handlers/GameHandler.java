@@ -61,6 +61,7 @@ public class GameHandler  implements HttpHandler{
         }
         System.out.println("Game found. Processing action...");
         myGame.play(exchange);
+        System.out.println("Finished");
 //		Game myGame = Game.returnGame(id);
 //		if (myGame == null) {
 //	        sendResponse(exchange, "Game not found", 404);

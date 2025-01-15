@@ -37,22 +37,27 @@ public class Game {
 
 
 	private String getValueByKey(HttpExchange player, String key)  {
-		byte[] data;
 		try {
-			data = player.getRequestBody().readAllBytes();
-			String body = new String(data);
-			JSONObject json = new JSONObject(body);
-			String value = json.getString(key);
-			if(value.isBlank()) {
-				return key;
-			} else {
-				return value;
-			}
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			System.out.println("Error while looking for key: "+key);
-			return key;
-		}	
+	        // Cache the request body to avoid multiple reads
+	        String body = (String) player.getAttribute("cachedBody");
+	        if (body == null) {
+	            byte[] data = player.getRequestBody().readAllBytes();
+	            body = new String(data);
+	            player.setAttribute("cachedBody", body); // Cache the body
+	        }
+	        
+	        // Parse JSON and return the value
+	        JSONObject json = new JSONObject(body);
+	        String value = json.optString(key, "");
+	        if (value.isBlank()) {
+	            return key;
+	        } else {
+	            return value;
+	        }
+	    } catch (IOException e) {
+	        System.out.println("Error while looking for key: " + key);
+	        return key;
+	    }
 	}
 
 
@@ -110,6 +115,7 @@ public class Game {
 	}
 	
 	public void play(HttpExchange exchange) throws IOException {
+		System.out.println("Starting");
 	    String playerName = getValueByKey(exchange, "name");
 	    String action = getValueByKey(exchange, "action").toLowerCase();
 
